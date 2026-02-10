@@ -507,6 +507,36 @@ function getPagesFallbackClassification(
 export type SubresourceIntegrityManifest = Record<string, string>
 export type PreviewPropsManifest = __ApiPreviewProps
 
+export type PrerenderManifestRouteRuntime = Pick<
+  PrerenderManifestRoute,
+  | 'renderingMode'
+  | 'initialRevalidateSeconds'
+  | 'initialExpireSeconds'
+  // prefetchDataRoute is only checked for existence, in packages/next/src/build/templates/app-page.ts
+  | 'prefetchDataRoute'
+>
+
+export type DynamicPrerenderManifestRouteRuntime = Pick<
+  DynamicPrerenderManifestRoute,
+  | 'renderingMode'
+  | 'fallback'
+  | 'fallbackRevalidate'
+  | 'fallbackExpire'
+  | 'fallbackSourceRoute'
+  | 'fallbackRouteParams'
+>
+
+export type PrerenderManifestRuntime = {
+  version: 4
+  routes: {
+    [route: string]: PrerenderManifestRouteRuntime
+  }
+  dynamicRoutes: {
+    [route: string]: DynamicPrerenderManifestRouteRuntime
+  }
+  notFoundRoutes: string[]
+}
+
 type ManifestBuiltRoute = {
   /**
    * The route pattern used to match requests for this route.
@@ -659,10 +689,9 @@ async function readManifest<T extends object>(filePath: string): Promise<T> {
   return JSON.parse(await readFileUtf8(filePath))
 }
 
-async function writePrerenderManifest(
-  distDir: string,
-  manifest: PrerenderManifest
-): Promise<void> {
+async function writePrerenderManifest<
+  T extends Pick<PrerenderManifest, 'routes' | 'dynamicRoutes'>,
+>(distDir: string, manifest: T): Promise<void> {
   // Sort for deterministic outputs
   manifest.routes = sortPagesObject(manifest.routes)
   manifest.dynamicRoutes = sortPagesObject(manifest.dynamicRoutes)
@@ -2954,12 +2983,47 @@ export default async function build(
         path.join(distDir, SERVER_DIRECTORY, MIDDLEWARE_MANIFEST)
       )
 
-      const prerenderManifest: PrerenderManifest = {
-        version: 4,
-        routes: {},
-        dynamicRoutes: {},
-        notFoundRoutes: [],
-        preview: previewProps,
+      let notFoundRoutes: string[] = []
+      let prerenderRoutes = new Map<
+        string,
+        {
+          routes: { [route: string]: PrerenderManifestRoute }
+          dynamicRoutes: { [route: string]: DynamicPrerenderManifestRoute }
+        }
+      >()
+      function addPrerenderRoute(
+        page: string,
+        routeKey: string,
+        route: PrerenderManifestRoute
+      ) {
+        if (appPageKeys.has(page)) {
+          page = `app/${page}/page`
+        } else {
+          page = `pages/${page}`
+        }
+        let entry = prerenderRoutes.get(page)
+        if (!entry) {
+          entry = { routes: {}, dynamicRoutes: {} }
+          prerenderRoutes.set(page, entry)
+        }
+        entry.routes[routeKey] = route
+      }
+      function addPrerenderDynamicRoute(
+        page: string,
+        routeKey: string,
+        route: DynamicPrerenderManifestRoute
+      ) {
+        if (appPageKeys.has(page)) {
+          page = `app/${page}/page`
+        } else {
+          page = `pages/${page}`
+        }
+        let entry = prerenderRoutes.get(page)
+        if (!entry) {
+          entry = { routes: {}, dynamicRoutes: {} }
+          prerenderRoutes.set(page, entry)
+        }
+        entry.dynamicRoutes[routeKey] = route
       }
 
       // Accumulate per-route segment inlining decisions for
@@ -3266,9 +3330,7 @@ export default async function build(
             ],
           })
 
-          prerenderManifest.notFoundRoutes = Array.from(
-            exportResult.ssgNotFoundPaths
-          )
+          notFoundRoutes = Array.from(exportResult.ssgNotFoundPaths)
 
           // remove server bundles that were exported
           for (const page of staticPages) {
@@ -3517,7 +3579,7 @@ export default async function build(
                   }
                 }
 
-                prerenderManifest.routes[route.pathname] = {
+                addPrerenderRoute(page, route.pathname, {
                   initialStatus: status,
                   initialHeaders: meta.headers,
                   renderingMode: isAppPPREnabled
@@ -3534,7 +3596,7 @@ export default async function build(
                   dataRoute,
                   prefetchDataRoute,
                   allowHeader: ALLOWED_HEADERS,
-                }
+                })
               } else {
                 hasRevalidateZero = true
 
@@ -3770,7 +3832,7 @@ export default async function build(
                   }
                 }
 
-                prerenderManifest.dynamicRoutes[route.pathname] = {
+                addPrerenderDynamicRoute(route.pathname, route.pathname, {
                   experimentalPPR: isRoutePPREnabled,
                   remainingPrerenderableParams:
                     route.remainingPrerenderableParams,
@@ -3821,7 +3883,7 @@ export default async function build(
                         }).re.source
                       ),
                   allowHeader: ALLOWED_HEADERS,
-                }
+                })
               }
             }
           })
@@ -3845,7 +3907,7 @@ export default async function build(
               delete pagesManifest[page]
               for (const locale of i18n.locales) {
                 const curPath = `/${locale}${page === '/' ? '' : page}`
-                if (prerenderManifest.notFoundRoutes.includes(curPath)) continue
+                if (notFoundRoutes.includes(curPath)) continue
                 const relativeDest =
                   page === '/'
                     ? `pages/${locale}.html`
@@ -4037,8 +4099,7 @@ export default async function build(
                   // TODO: do we want to show all locale variants in build output
                   for (const locale of i18n.locales) {
                     const localePage = `/${locale}${page === '/' ? '' : page}`
-                    const isNotFoundTrue =
-                      prerenderManifest.notFoundRoutes.includes(localePage)
+                    const isNotFoundTrue = notFoundRoutes.includes(localePage)
 
                     if (isNotFoundTrue) {
                       await deleteNotFoundPageFiles(
@@ -4048,7 +4109,7 @@ export default async function build(
 
                     const cacheControl = getCacheControl(localePage)
 
-                    prerenderManifest.routes[localePage] = {
+                    addPrerenderRoute(page, localePage, {
                       ...(!isNotFoundTrue && {
                         routeType: 'page' as const,
                         response: 'complete' as const,
@@ -4066,18 +4127,17 @@ export default async function build(
                       ),
                       prefetchDataRoute: undefined,
                       allowHeader: ALLOWED_HEADERS,
-                    }
+                    })
                   }
                 } else {
-                  const isNotFoundTrue =
-                    prerenderManifest.notFoundRoutes.includes(page)
+                  const isNotFoundTrue = notFoundRoutes.includes(page)
                   if (isNotFoundTrue) {
                     await deleteNotFoundPageFiles(file)
                   }
 
                   const cacheControl = getCacheControl(page)
 
-                  prerenderManifest.routes[page] = {
+                  addPrerenderRoute(file, page, {
                     ...(!isNotFoundTrue && {
                       routeType: 'page' as const,
                       response: 'complete' as const,
@@ -4096,7 +4156,7 @@ export default async function build(
                     // Pages does not have a prefetch data route.
                     prefetchDataRoute: undefined,
                     allowHeader: ALLOWED_HEADERS,
-                  }
+                  })
                 }
                 if (pageInfo) {
                   pageInfo.initialCacheControl = getCacheControl(page)
@@ -4106,8 +4166,7 @@ export default async function build(
                 // the HTML/JSON files directly to their final location.
                 // We only need to update the prerender manifest.
                 for (const route of additionalPaths.get(page) ?? []) {
-                  const isNotFoundTrue =
-                    prerenderManifest.notFoundRoutes.includes(route.pathname)
+                  const isNotFoundTrue = notFoundRoutes.includes(route.pathname)
                   if (isNotFoundTrue) {
                     await deleteNotFoundPageFiles(
                       normalizePagePath(route.pathname)
@@ -4116,7 +4175,7 @@ export default async function build(
 
                   const cacheControl = getCacheControl(route.pathname)
 
-                  prerenderManifest.routes[route.pathname] = {
+                  addPrerenderRoute(file, route.pathname, {
                     ...(!isNotFoundTrue && {
                       routeType: 'page' as const,
                       response: 'complete' as const,
@@ -4135,7 +4194,7 @@ export default async function build(
                     // Pages does not have a prefetch data route.
                     prefetchDataRoute: undefined,
                     allowHeader: ALLOWED_HEADERS,
-                  }
+                  })
 
                   if (pageInfo) {
                     pageInfo.initialCacheControl = cacheControl
@@ -4252,7 +4311,7 @@ export default async function build(
             fallback = `${normalizedRoute}.html`
           }
 
-          prerenderManifest.dynamicRoutes[tbdRoute] = {
+          addPrerenderDynamicRoute(normalizedRoute, tbdRoute, {
             routeRegex: normalizeRouteRegex(
               getNamedRouteRegex(tbdRoute, {
                 prefixRouteKeys: false,
@@ -4279,9 +4338,27 @@ export default async function build(
             prefetchDataRoute: undefined,
             prefetchDataRouteRegex: undefined,
             allowHeader: ALLOWED_HEADERS,
-          }
+          })
         })
+      }
 
+      const prerenderManifest: PrerenderManifest = {
+        version: 4,
+        routes: Object.fromEntries(
+          [...prerenderRoutes.values()].flatMap((route) =>
+            Object.entries(route.routes)
+          )
+        ),
+        dynamicRoutes: Object.fromEntries(
+          [...prerenderRoutes.values()].flatMap((route) =>
+            Object.entries(route.dynamicRoutes)
+          )
+        ),
+        notFoundRoutes,
+        preview: previewProps,
+      }
+
+      if (ssgPages.size > 0 || appDir) {
         NextBuildContext.previewModeId = previewProps.previewModeId
         NextBuildContext.fetchCacheKeyPrefix =
           config.experimental.fetchCacheKeyPrefix
@@ -4312,6 +4389,14 @@ export default async function build(
           buildId,
           locales: config.i18n?.locales,
         })
+
+        for (const [page, manifest] of prerenderRoutes) {
+          await mkdir(path.join(distDir, 'server', page), { recursive: true })
+          await writePrerenderManifest(
+            path.join(distDir, 'server', page),
+            manifest
+          )
+        }
       } else {
         await writePrerenderManifest(distDir, {
           version: 4,
