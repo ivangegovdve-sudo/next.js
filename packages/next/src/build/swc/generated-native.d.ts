@@ -410,11 +410,9 @@ export declare function projectEntrypointsSubscribe(
   project: { __napiType: 'Project' },
   func: (...args: any[]) => any
 ): { __napiType: 'RootTask' }
-export declare function projectAllHmrEvents(
-  project: { __napiType: 'Project' },
-  target: string,
-  func: (...args: any[]) => any
-): { __napiType: 'RootTask' }
+export declare function projectGetServerHmrUpdate(project: {
+  __napiType: 'Project'
+}): Promise<TurbopackResult>
 export declare function projectHmrEvents(
   project: { __napiType: 'Project' },
   chunkName: RcStr,

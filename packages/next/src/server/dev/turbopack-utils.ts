@@ -373,21 +373,6 @@ export async function handleRouteType({
             }
             // Report the next compilation again
             readyIds?.delete(pathname)
-            // When server fast refresh is enabled, the aggregate server-HMR
-            // subscription sends SERVER_COMPONENT_CHANGES after applying the
-            // update in-process. Sending here too would double the refresh.
-            //
-            // But the aggregate subscription only fires when there is a live
-            // server-HMR handler registered (i.e. the page has rendered at
-            // least once). When recovering from a build error the page never
-            // rendered, so no handler exists, the aggregate stays silent, and
-            // this per-page send is the only thing that clears the redbox.
-            // Only suppress when a handler is actually live to own the refresh.
-            const hasLiveServerHmrHandler =
-              (globalThis.__turbopack_server_hmr_handlers__?.size ?? 0) > 0
-            if (hooks?.serverFastRefresh && hasLiveServerHmrHandler) {
-              return
-            }
             hooks?.handleServerComponentChanges?.()
           },
           (e) => {

@@ -13,7 +13,7 @@ describe('server-hmr', () => {
 
   describe('module preservation', () => {
     itTurbopackDev(
-      'does not compile a changed server module until the next request',
+      'does not evaluate a changed server module until the next request',
       async () => {
         await next.deleteFile('lazy-rebuild-probe.log').catch(() => {})
 
@@ -27,13 +27,16 @@ describe('server-hmr', () => {
           window.fetch = (input, init) => {
             const headers = new Headers(init?.headers)
             if (headers.get('next-hmr-refresh') === '1') {
+              ;(window as any).__didBlockHmrRequest = true
               return new Promise(() => {})
             }
             return originalFetch(input, init)
           }
         })
 
-        const initialCompileLog = await next.readFile('lazy-rebuild-probe.log')
+        const initialEvaluationLog = await next.readFile(
+          'lazy-rebuild-probe.log'
+        )
 
         await next.patchFile('app/lazy-rebuild/probe.js', (content) =>
           content.replace(
@@ -44,15 +47,20 @@ describe('server-hmr', () => {
 
         await retry(async () => {
           expect(await next.readFile('lazy-rebuild-probe.log')).toBe(
-            initialCompileLog
+            initialEvaluationLog
           )
+          expect(
+            await browser.eval(() =>
+              Boolean((window as any).__didBlockHmrRequest)
+            )
+          ).toBe(true)
         })
 
         expect(await (await next.fetch('/lazy-rebuild')).text()).toContain(
           'updated'
         )
         expect(await next.readFile('lazy-rebuild-probe.log')).not.toBe(
-          initialCompileLog
+          initialEvaluationLog
         )
       }
     )
