@@ -787,7 +787,7 @@ async function generateDynamicRSCPayload(
       f: flightData,
       q: getRenderedSearch(query),
       i: !!couldBeIntercepted,
-      S: workStore.isStaticGeneration,
+      S: workStore.executionMode === 'prerender',
       h: getMetadataVaryParamsAccumulator(),
       r: getRootParamsVaryParamsAccumulator() ?? undefined,
     }
@@ -816,7 +816,7 @@ async function generateDynamicRSCPayload(
   // its presence as authoritative.
   // TODO: Move this to the prefetch hints file so we don't have to walk the
   // tree on every render.
-  if (!workStore.isStaticGeneration) {
+  if (workStore.executionMode !== 'prerender') {
     const dynamicStaleTime = await getDynamicStaleTime(
       ctx.componentMod.routeModule.userland.loaderTree
     )
@@ -838,7 +838,10 @@ function createErrorContext(
     // TODO: is this correct if `isPossibleServerAction` is a false positive?
     routeType: ctx.isPossibleServerAction ? 'action' : 'render',
     renderSource,
-    revalidateReason: getRevalidateReason(ctx.workStore),
+    revalidateReason: getRevalidateReason({
+      isOnDemandRevalidate: ctx.workStore.isOnDemandRevalidate,
+      isStaticGeneration: ctx.workStore.executionMode === 'prerender',
+    }),
   }
 }
 
@@ -2091,7 +2094,7 @@ async function getRSCPayload(
     prefetchInliningEnabled,
     ctx.renderOpts.cacheComponents,
     ctx.renderOpts.partialPrefetching,
-    workStore.isStaticGeneration,
+    workStore.executionMode === 'prerender',
     ctx.renderOpts.isBuildTimePrerendering ?? false,
     getDynamicParamFromSegment,
     query
@@ -2176,7 +2179,7 @@ async function getRSCPayload(
   //
   // See similar comment in create-component-tree.tsx for more context.
   const isPossiblyPartialHead =
-    workStore.isStaticGeneration &&
+    workStore.executionMode === 'prerender' &&
     ctx.renderOpts.experimental.isRoutePPREnabled === true
 
   return maybeAppendBuildIdToRSCPayload(ctx, {
@@ -2201,7 +2204,8 @@ async function getRSCPayload(
     // With Cache Components, all routes support it. Without it, only fully
     // static pages do, because their per-segment prefetch responses are
     // generated during static generation (build or ISR).
-    S: workStore.isStaticGeneration || ctx.renderOpts.cacheComponents,
+    S:
+      workStore.executionMode === 'prerender' || ctx.renderOpts.cacheComponents,
     h: getMetadataVaryParamsAccumulator(),
     r: getRootParamsVaryParamsAccumulator() ?? undefined,
     s: staleTimeIterable,
@@ -2213,9 +2217,10 @@ async function getRSCPayload(
     // authoritative.
     // TODO: Move this to the prefetch hints file so we don't have to walk
     // the tree on every render.
-    d: !workStore.isStaticGeneration
-      ? ((await getDynamicStaleTime(tree)) ?? undefined)
-      : undefined,
+    d:
+      workStore.executionMode !== 'prerender'
+        ? ((await getDynamicStaleTime(tree)) ?? undefined)
+        : undefined,
   } satisfies InitialRSCPayload & { P: ReactNode })
 }
 
@@ -2293,7 +2298,7 @@ async function getErrorRSCPayload(
     errorPrefetchInliningEnabled,
     ctx.renderOpts.cacheComponents,
     ctx.renderOpts.partialPrefetching,
-    workStore.isStaticGeneration,
+    workStore.executionMode === 'prerender',
     ctx.renderOpts.isBuildTimePrerendering ?? false,
     getDynamicParamFromSegment,
     query
@@ -2337,7 +2342,7 @@ async function getErrorRSCPayload(
   )
 
   const isPossiblyPartialHead =
-    workStore.isStaticGeneration &&
+    workStore.executionMode === 'prerender' &&
     ctx.renderOpts.experimental.isRoutePPREnabled === true
 
   return maybeAppendBuildIdToRSCPayload(ctx, {
@@ -2358,7 +2363,8 @@ async function getErrorRSCPayload(
     // With Cache Components, all routes support it. Without it, only fully
     // static pages do, because their per-segment prefetch responses are
     // generated during static generation (build or ISR).
-    S: workStore.isStaticGeneration || ctx.renderOpts.cacheComponents,
+    S:
+      workStore.executionMode === 'prerender' || ctx.renderOpts.cacheComponents,
     h: getMetadataVaryParamsAccumulator(),
     r: getRootParamsVaryParamsAccumulator() ?? undefined,
   } satisfies InitialRSCPayload)
@@ -2683,7 +2689,7 @@ async function renderToHTMLOrFlightImpl(
   query = { ...query }
   stripInternalQueries(query)
 
-  const { isStaticGeneration } = workStore
+  const isStaticGeneration = workStore.executionMode === 'prerender'
 
   let requestId: string
   let htmlRequestId: string
@@ -6321,7 +6327,7 @@ function buildDevValidationWorkStore(
   })
 
   return {
-    isStaticGeneration: false,
+    executionMode: 'request',
     page: message.page,
     route: message.route,
     forceStatic: message.forceStatic,
@@ -7904,7 +7910,7 @@ async function validateInstantConfigInBuildWithSample(
 
   // NOTE: Matching the field order in `createWorkStore` to avoid deopting.
   const workStore: WorkStore = {
-    isStaticGeneration: false,
+    executionMode: 'request',
     page: outerWorkStore.page,
     route: outerWorkStore.route,
     incrementalCache: outerWorkStore.incrementalCache,
