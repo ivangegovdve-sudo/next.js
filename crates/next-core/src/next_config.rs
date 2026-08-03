@@ -2538,6 +2538,15 @@ impl NextConfig {
     }
 
     #[turbo_tasks::function]
+    pub async fn turbo_server_minify(&self, mode: Vc<NextMode>) -> Result<Vc<bool>> {
+        let minify = self.experimental.turbopack_minify;
+        Ok(Vc::cell(
+            minify.unwrap_or(matches!(*mode.await?, NextMode::Build))
+                && self.experimental.server_minification.unwrap_or(true),
+        ))
+    }
+
+    #[turbo_tasks::function]
     pub async fn turbo_scope_hoisting(&self, mode: Vc<NextMode>) -> Result<Vc<bool>> {
         Ok(Vc::cell(match *mode.await? {
             // Ignore configuration in development mode to not break HMR
