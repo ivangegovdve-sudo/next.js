@@ -10495,6 +10495,7 @@ dependencies = [
  "const_format",
  "data-encoding",
  "either",
+ "erased-serde",
  "indexmap 2.13.0",
  "num-bigint",
  "patricia_tree",

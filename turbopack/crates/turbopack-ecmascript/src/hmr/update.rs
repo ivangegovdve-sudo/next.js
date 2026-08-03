@@ -1,10 +1,9 @@
-use std::sync::Arc;
-
 use anyhow::Result;
 use turbo_tasks::{FxIndexMap, ReadRef, ResolvedVc, TryJoinIterExt, Vc};
 use turbopack_core::{
     chunk::ModuleId,
     code_builder::Code,
+    update_instruction::UpdateInstructionValue,
     version::{PartialUpdate, TotalUpdate, Update, Version},
 };
 
@@ -268,13 +267,15 @@ pub async fn update_ecmascript_merged_chunk(
             }
         };
 
-        merged_update.chunks.insert(chunk_path, chunk_update);
+        merged_update
+            .chunks
+            .insert(chunk_path.to_owned(), chunk_update);
     }
 
     for (chunk_path, chunk_version) in from_versions_by_chunk_path {
         let hashes = &chunk_version.entries_hashes;
         merged_update.chunks.insert(
-            chunk_path,
+            chunk_path.to_owned(),
             EcmascriptMergedChunkUpdate::Deleted(EcmascriptMergedChunkDeleted {
                 modules: hashes.keys().cloned().collect(),
             }),
@@ -288,7 +289,7 @@ pub async fn update_ecmascript_merged_chunk(
             to: Vc::upcast::<Box<dyn Version>>(to_merged_version)
                 .into_trait_ref()
                 .await?,
-            instruction: Arc::new(serde_json::to_value(&merged_update)?),
+            instruction: UpdateInstructionValue::new(merged_update),
         })
     })
 }

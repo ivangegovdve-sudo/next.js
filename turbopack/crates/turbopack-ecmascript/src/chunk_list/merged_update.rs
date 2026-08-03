@@ -12,34 +12,34 @@
 
 use anyhow::Result;
 use serde::Serialize;
-use turbo_tasks::{FxIndexMap, FxIndexSet, Vc};
+use turbo_tasks::{FxIndexMap, FxIndexSet, NonLocalValue, Vc, trace::TraceRawVcs};
 use turbo_tasks_fs::rope::Rope;
 use turbopack_core::{chunk::ModuleId, code_builder::Code, source_map::GenerateSourceMap};
 
 /// A merged update covering one or more ecmascript chunks that share a merger.
-#[derive(Serialize, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, TraceRawVcs, NonLocalValue)]
 #[serde(
     tag = "type",
     rename = "EcmascriptMergedUpdate",
     rename_all = "camelCase"
 )]
-pub struct EcmascriptMergedUpdate<'a> {
+pub struct EcmascriptMergedUpdate {
     /// A map from module id to its latest module entry (code + source map url).
     #[serde(skip_serializing_if = "FxIndexMap::is_empty")]
     pub entries: FxIndexMap<ModuleId, EcmascriptModuleEntry>,
     /// A map from chunk path to the update for that chunk.
     #[serde(skip_serializing_if = "FxIndexMap::is_empty")]
-    pub chunks: FxIndexMap<&'a str, EcmascriptMergedChunkUpdate>,
+    pub chunks: FxIndexMap<String, EcmascriptMergedChunkUpdate>,
 }
 
-impl EcmascriptMergedUpdate<'_> {
+impl EcmascriptMergedUpdate {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty() && self.chunks.is_empty()
     }
 }
 
 /// Per-chunk portion of an [`EcmascriptMergedUpdate`].
-#[derive(Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TraceRawVcs, NonLocalValue)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum EcmascriptMergedChunkUpdate {
     Added(EcmascriptMergedChunkAdded),
@@ -48,7 +48,7 @@ pub enum EcmascriptMergedChunkUpdate {
 }
 
 /// A chunk that was newly added in this version.
-#[derive(Serialize, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, TraceRawVcs, NonLocalValue)]
 #[serde(rename_all = "camelCase")]
 pub struct EcmascriptMergedChunkAdded {
     #[serde(skip_serializing_if = "FxIndexSet::is_empty")]
@@ -56,7 +56,7 @@ pub struct EcmascriptMergedChunkAdded {
 }
 
 /// A chunk that was removed in this version.
-#[derive(Serialize, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, TraceRawVcs, NonLocalValue)]
 #[serde(rename_all = "camelCase")]
 pub struct EcmascriptMergedChunkDeleted {
     // Technically, this is redundant, since the client will already know all
@@ -68,7 +68,7 @@ pub struct EcmascriptMergedChunkDeleted {
 
 /// A chunk that was present in both versions and whose module membership
 /// changed.
-#[derive(Serialize, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, TraceRawVcs, NonLocalValue)]
 #[serde(rename_all = "camelCase")]
 pub struct EcmascriptMergedChunkPartial {
     #[serde(skip_serializing_if = "FxIndexSet::is_empty")]
@@ -78,7 +78,7 @@ pub struct EcmascriptMergedChunkPartial {
 }
 
 /// The code (and source map) for a single module in a merged update.
-#[derive(Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TraceRawVcs, NonLocalValue)]
 pub struct EcmascriptModuleEntry {
     #[serde(with = "turbo_tasks_fs::rope::ser_as_string")]
     pub code: Rope,
