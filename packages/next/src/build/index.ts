@@ -2998,11 +2998,7 @@ export default async function build(
         routeKey: string,
         route: PrerenderManifestRoute
       ) {
-        if (appPageKeys.has(page)) {
-          page = `app/${page}/page`
-        } else {
-          page = `pages/${page}`
-        }
+        page = path.join(appPageKeys.has(page) ? 'app' : 'pages', page, '/page')
         let entry = prerenderRoutes.get(page)
         if (!entry) {
           entry = { routes: {}, dynamicRoutes: {} }
@@ -3015,11 +3011,7 @@ export default async function build(
         routeKey: string,
         route: DynamicPrerenderManifestRoute
       ) {
-        if (appPageKeys.has(page)) {
-          page = `app/${page}/page`
-        } else {
-          page = `pages/${page}`
-        }
+        page = path.join(appPageKeys.has(page) ? 'app' : 'pages', page, '/page')
         let entry = prerenderRoutes.get(page)
         if (!entry) {
           entry = { routes: {}, dynamicRoutes: {} }
