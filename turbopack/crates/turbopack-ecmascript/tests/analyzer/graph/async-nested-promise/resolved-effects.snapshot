@@ -1,0 +1,35 @@
+0 -> 1 call = (...) => Promise<findRow()>()
+
+0 -> 2 call = (...) => Promise<findRowWrapped()>()
+
+0 -> 3 call = (...) => Promise<(useFirst ? findRow() : findRowWrapped())>(true)
+
+0 -> 4 call = (...) => Promise<findRow()>()
+
+0 -> 5 unreachable = ???*0*
+- *0* unreachable
+  ⚠️  This value might have side effects
+
+0 -> 6 call = (...) => Promise<null>()
+
+0 -> 7 unreachable = ???*0*
+- *0* unreachable
+  ⚠️  This value might have side effects
+
+0 -> 8 call = (...) => Promise<findRow()>()
+
+0 -> 9 unreachable = ???*0*
+- *0* unreachable
+  ⚠️  This value might have side effects
+
+0 -> 10 conditional = ???*0*
+- *0* arguments[0]
+  ⚠️  function calls are not analyzed yet
+
+10 -> 11 call = (...) => Promise<null>()
+
+10 -> 12 call = (...) => Promise<findRow()>()
+
+0 -> 13 unreachable = ???*0*
+- *0* unreachable
+  ⚠️  This value might have side effects

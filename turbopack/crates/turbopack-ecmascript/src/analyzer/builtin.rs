@@ -686,15 +686,56 @@ pub fn replace_builtin<'a>(arena: &'a Bump, value: &mut JsValue<'a>) -> Modified
         }
 
         JsValue::Awaited(_, operand) => {
-            if let JsValue::Promise(_, inner) = &mut **operand {
-                *value = take(&mut **inner);
+            let mut resolved = take(&mut **operand);
+            resolve_promises(&mut resolved);
+            *value = resolved;
+            Modified::Yes
+        }
+
+        // matching a promise resolving to a promise like `Promise<Promise<T>>`
+        JsValue::Promise(_, operand) => {
+            if resolve_promises(operand) {
+                *value = JsValue::promise(arena, take(&mut **operand));
                 Modified::Yes
             } else {
-                *value = take(&mut **operand);
-                Modified::Yes
+                Modified::No
             }
         }
 
         _ => Modified::No,
+    }
+}
+
+/// Replaces `value` with what awaiting it produces, returning whether it changed.
+///
+/// `Promise<Promise<T>>` is not representable, so nested promises collapse:
+///
+/// ```text
+/// Promise<Promise<null>>     -> null
+/// Promise<null | Promise<0>> -> null | 0
+/// null                       -> null
+/// ```
+fn resolve_promises<'a>(value: &mut JsValue<'a>) -> bool {
+    match value {
+        JsValue::Promise(_, inner) => {
+            let mut inner = take(&mut **inner);
+            resolve_promises(&mut inner);
+            *value = inner;
+            true
+        }
+        // rebuilt to refresh `total_nodes` and drop `logical_property`, which describes the
+        // promise and not what it resolves to
+        JsValue::Alternatives { values, .. } => {
+            let mut modified = false;
+            for alternative in values.iter_mut() {
+                modified |= resolve_promises(alternative);
+            }
+            if modified {
+                let values = take(values);
+                *value = JsValue::alternatives(values);
+            }
+            modified
+        }
+        _ => false,
     }
 }

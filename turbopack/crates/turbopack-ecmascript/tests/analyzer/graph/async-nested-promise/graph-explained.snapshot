@@ -1,0 +1,17 @@
+awaited (const after eval) = await(findRowWrapped())
+
+awaitedConditional (const after eval) = await(findRowConditional(true))
+
+awaitedTwice (const after eval) = await(findRowWrappedTwice())
+
+findRow (const after eval) = (...) => Promise<null>
+
+findRowConditional (const after eval) = (...) => Promise<(useFirst ? findRow() : findRowWrapped())>
+
+findRowWrapped (const after eval) = (...) => Promise<findRow()>
+
+findRowWrappedTwice (const after eval) = (...) => Promise<findRowWrapped()>
+
+notAwaited (const after eval) = findRowWrapped()
+
+useFirst = arguments[0]

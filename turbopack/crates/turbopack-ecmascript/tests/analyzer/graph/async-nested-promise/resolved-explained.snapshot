@@ -1,0 +1,19 @@
+awaited = null
+
+awaitedConditional = null
+
+awaitedTwice = null
+
+findRow = (...) => Promise<null>
+
+findRowConditional = (...) => Promise<(useFirst ? findRow() : findRowWrapped())>
+
+findRowWrapped = (...) => Promise<findRow()>
+
+findRowWrappedTwice = (...) => Promise<findRowWrapped()>
+
+notAwaited = Promise<null>
+
+useFirst = ???*0*
+- *0* arguments[0]
+  ⚠️  function calls are not analyzed yet
